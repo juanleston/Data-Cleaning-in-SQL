@@ -1,0 +1,133 @@
+-- Check data:
+SELECT * FROM housing;
+
+-- Populate Property Address data:
+SELECT *
+FROM housing
+WHERE propertyaddress IS NULL;
+
+	-- Check which null properties could be imputed by using the adress of another property with the same ParcelID:
+	SELECT a.uniqueid, a.parcelid, a.propertyaddress, b.uniqueid, b.parcelid, b.propertyaddress, COALESCE(a.propertyaddress, b.propertyaddress)
+	FROM housing a
+	JOIN housing b
+	ON a.parcelid = b.parcelid
+	AND a.uniqueid <> b.uniqueid
+	WHERE a.propertyaddress IS NULL;
+
+	-- Update null values:
+	UPDATE housing
+	SET propertyaddress = COALESCE(a.propertyaddress, b.propertyaddress)
+	FROM housing a
+	JOIN housing b
+	ON a.parcelid = b.parcelid
+	AND a.uniqueid <> b.uniqueid
+	WHERE a.propertyaddress IS NULL;
+	
+-- Breaking out Property Address into individual columns (street, city):
+SELECT propertyaddress,
+SPLIT_PART(propertyaddress,', ',1) as propertystreet, 
+SPLIT_PART(propertyaddress,', ',2) as propertycity
+FROM housing;
+
+	-- Create columns before adding data to them:
+	ALTER TABLE housing
+	ADD PropertySplitAddress VARCHAR(255);
+	
+	ALTER TABLE housing
+	ADD PropertySplitCity VARCHAR(255);
+	
+	-- Add data to recently created columns:
+	UPDATE housing
+	SET PropertySplitAddress = SPLIT_PART(propertyaddress,', ',1);
+	
+	UPDATE housing
+	SET PropertySplitCity = SPLIT_PART(propertyaddress,', ',2);
+	
+-- Breaking out Owner Address into individual columns (street, city, state):
+SELECT owneraddress,
+SPLIT_PART(owneraddress,', ',1) as street, 
+SPLIT_PART(owneraddress,', ',2) as city,
+SPLIT_PART(owneraddress,', ',3) as state
+FROM housing;
+
+	-- Create columns before adding data to them:
+	ALTER TABLE housing
+	ADD OwnerSplitAddress VARCHAR(255);
+	
+	ALTER TABLE housing
+	ADD OwnerSplitCity VARCHAR(255);
+	
+	ALTER TABLE housing
+	ADD OwnerSplitState VARCHAR(255);
+	
+		-- Add data to recently created columns:
+	UPDATE housing
+	SET OwnerSplitAddress = SPLIT_PART(owneraddress,', ',1);
+	
+	UPDATE housing
+	SET OwnerSplitCity = SPLIT_PART(owneraddress,', ',2);
+	
+	UPDATE housing
+	SET OwnerSplitState = SPLIT_PART(owneraddress,', ',3);
+	
+-- Rename Y and N values to Yes and No of the "Sold as Vacant" feature:
+SELECT DISTINCT(soldasvacant), COUNT(soldasvacant)
+FROM housing
+GROUP BY soldasvacant
+ORDER BY 2 DESC;
+
+SELECT soldasvacant,
+CASE WHEN soldasvacant = 'Y' THEN 'Yes'
+     WHEN soldasvacant = 'N' THEN 'No'
+	 ELSE soldasvacant
+	 END
+FROM housing;
+
+	-- Replace Y and N values:
+	UPDATE housing
+	SET soldasvacant = CASE WHEN soldasvacant = 'Y' THEN 'Yes'
+     	WHEN soldasvacant = 'N' THEN 'No'
+	 	ELSE soldasvacant
+	 	END;
+		
+-- Remove Duplicates:
+
+	--Create a table with unique rows only using a sub-query:
+	CREATE TABLE housing_unique AS(
+	SELECT * 
+	FROM (SELECT *,
+			ROW_NUMBER() OVER(
+				PARTITION BY parcelid,
+				propertyaddress,
+				saleprice,
+				saledate,
+				legalreference 
+				ORDER BY uniqueid
+			) row_num
+	FROM housing) AS a
+	WHERE row_num = 1
+	ORDER BY propertyaddress);
+	
+	--Check results:
+	SELECT * FROM housing_unique;
+	SELECT * FROM housing;
+	--Drop irrelevant column:
+	ALTER TABLE housing_unique
+	DROP COLUMN row_num;
+	
+	-- Drop original housing table:
+	DROP TABLE housing;
+	
+	--Rename table:
+	ALTER TABLE housing_unique
+	RENAME TO housing;
+	
+-- Delete unused columns:
+ALTER TABLE housing
+DROP COLUMN propertyaddress;
+
+ALTER TABLE housing
+DROP COLUMN owneraddress;
+
+ALTER TABLE housing
+DROP COLUMN taxdistrict;
